@@ -1,6 +1,6 @@
 """
 =============================================================================
-Capstone Project - Data Science PGC
+Capstone Project - Data Science
 PHASE 1: WEB SCRAPING SCRIPT
 Domain: Fitness & Wellness Apps (Google Play Store)
 
@@ -29,22 +29,60 @@ from google_play_scraper import search, app as app_details, reviews, Sort
 # CONFIG
 # -----------------------------------------------------------------------
 
-# Search terms chosen to cover the main fitness/wellness sub-categories
-# (workout, weight loss, nutrition, wearables, yoga, etc.) so that
-# combining results across terms gets us well past 1,000 unique apps.
+# NOTE: The Python `google-play-scraper` library does not offer a
+# "similar apps" lookup (unlike its Node.js counterpart), so instead of
+# expanding from a small seed set, we cast a much wider net of search
+# terms up front - covering workout types, equipment, body parts, diets,
+# and fitness sub-audiences - so de-duplicated results realistically
+# clear 1,000+ unique apps.
 SEARCH_TERMS = [
-    "fitness tracker",
-    "workout planner",
-    "weight loss",
-    "step counter",
-    "yoga app",
-    "gym workout",
-    "calorie counter",
-    "home workout",
-    "running tracker",
-    "meditation and wellness",
-    "personal trainer app",
-    "HIIT workout",
+    # General fitness / tracking
+    "fitness tracker", "workout planner", "step counter", "calorie counter",
+    "macro tracker", "water reminder", "sleep tracker", "fitness challenge",
+    "30 day fitness challenge", "workout log",
+    # Workout types
+    "HIIT workout", "home workout", "gym workout", "bodyweight workout",
+    "calisthenics", "crossfit", "strength training app", "cardio workout",
+    "full body workout", "functional training",
+    # Body-part specific
+    "ab workout", "core workout", "leg workout", "arm workout",
+    "back workout", "chest workout",
+    # Equipment specific
+    "dumbbell workout", "kettlebell workout", "resistance bands workout",
+    "treadmill workout", "rowing machine app",
+    # Yoga / mindfulness / recovery
+    "yoga app", "pilates app", "stretching app", "meditation app",
+    "mindfulness app", "breathing exercises app", "foam rolling",
+    "flexibility training", "recovery app",
+    # Cardio / outdoor
+    "running tracker", "walking app", "cycling tracker", "swimming tracker",
+    "dance workout", "zumba app", "boxing workout", "martial arts training",
+    "sports training app",
+    # Diet / nutrition
+    "weight loss app", "weight gain app", "muscle building app",
+    "bodybuilding app", "intermittent fasting", "keto diet app",
+    "vegan diet app", "nutrition planner",
+    # Trainer / personalized
+    "personal trainer app", "workout planner women", "workout planner men",
+    "senior fitness app", "prenatal fitness app", "kids fitness app",
+    "gym membership app", "fitness community app",
+    "senior fitness app", "prenatal fitness app", "kids fitness app",
+    "gym membership app", "fitness community app",
+    # Extra buffer terms
+    "ab roller workout", "resistance training", "cardio blast",
+    "fitness for beginners", "no equipment workout", "wall pilates",
+    "barre workout", "trx workout", "plyometric training",
+    "fitness goal tracker", "hydration tracker", "posture correction app",
+    "fat burning workout", "toning workout", "fitness quotes motivation",
+    "ab roller workout", "resistance training", "cardio blast",
+    "fitness for beginners", "no equipment workout", "wall pilates",
+    "barre workout", "trx workout", "plyometric training",
+    "fitness goal tracker", "hydration tracker", "posture correction app",
+    "fat burning workout", "toning workout", "fitness motivation app",
+    "fitness for seniors", "postnatal fitness", "athlete training app",
+    "sports performance app", "injury recovery app", "physical therapy app",
+    "workout music app", "gym finder app", "personal record tracker",
+    "fitness journal", "body recomposition app",
 ]
 
 RESULTS_PER_TERM = 100      # max results google-play-scraper returns per search term
@@ -52,8 +90,8 @@ REVIEWS_PER_APP = 40        # number of recent reviews to pull per app
 COUNTRY = "us"
 LANG = "en"
 
-RAW_APPS_CSV = "raw_apps.csv"
-RAW_REVIEWS_CSV = "raw_reviews.csv"
+RAW_APPS_CSV = "data/raw/raw_apps.csv"
+RAW_REVIEWS_CSV = "data/raw/raw_reviews.csv"
 
 APP_FIELDS = [
     "app_id", "title", "developer", "category", "score", "ratings",
@@ -91,8 +129,9 @@ def collect_app_ids():
 
         new_ids = 0
         for r in results:
-            if r["appId"] not in seen_ids:
-                seen_ids.add(r["appId"])
+            app_id = r.get("appId")
+            if app_id and app_id not in seen_ids:   # skip None/empty IDs
+                seen_ids.add(app_id)
                 new_ids += 1
 
         print(f"  -> {len(results)} results, {new_ids} new unique apps "
@@ -112,10 +151,15 @@ def fetch_app_details(app_ids):
     apps_data = []
 
     for i, app_id in enumerate(app_ids, 1):
-        try:
-            d = app_details(app_id, lang=LANG, country=COUNTRY)
-        except Exception as e:
-            print(f"  ! Failed to fetch details for {app_id}: {e}")
+        d = None
+        for attempt in range(3):
+            try:
+                d = app_details(app_id, lang=LANG, country=COUNTRY)
+                break
+            except Exception as e:
+                time.sleep(3)
+        if d is None:
+            print(f"  ! Giving up on {app_id} after 3 attempts")
             continue
 
         apps_data.append({
