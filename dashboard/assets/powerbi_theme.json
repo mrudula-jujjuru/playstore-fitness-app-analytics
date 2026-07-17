@@ -1,0 +1,50 @@
+{
+  "name": "FitScope Analytics",
+  "dataColors": [
+    "#1B4B43",
+    "#2E8B7F",
+    "#8FBFA8",
+    "#E8B923",
+    "#FF6B5C",
+    "#6B4E9E",
+    "#6B7280",
+    "#143630"
+  ],
+  "background": "#FAFAF8",
+  "foreground": "#1B4B43",
+  "tableAccent": "#1B4B43",
+  "good": "#2E8B7F",
+  "neutral": "#E8B923",
+  "bad": "#FF6B5C",
+  "textClasses": {
+    "title": {
+      "fontFace": "Segoe UI Semibold",
+      "color": "#1B4B43",
+      "fontSize": 14
+    },
+    "label": {
+      "fontFace": "Segoe UI",
+      "color": "#6B7280",
+      "fontSize": 10
+    },
+    "callout": {
+      "fontFace": "Segoe UI Semibold",
+      "color": "#1B4B43",
+      "fontSize": 32
+    }
+  },
+  "visualStyles": {
+    "*": {
+      "*": {
+        "background": [{ "color": { "solid": { "color": "#FFFFFF" } } }],
+        "border": [{ "show": true, "color": { "solid": { "color": "#E5E7EB" } } }]
+      }
+    },
+    "card": {
+      "*": {
+        "labels": [{ "color": { "solid": { "color": "#1B4B43" } }, "fontSize": 28 }],
+        "categoryLabels": [{ "color": { "solid": { "color": "#6B7280" } }, "fontSize": 11 }]
+      }
+    }
+  }
+}
