@@ -23,8 +23,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Resolve paths relative to this script's location, so the app works
-# regardless of which folder you launch `streamlit run` from.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGO_PATH = os.path.join(BASE_DIR, "assets", "logo.png")
 APPS_CSV = os.path.join(BASE_DIR, "..", "data", "processed", "apps_with_clusters.csv")
@@ -34,10 +32,10 @@ REVIEWS_CSV = os.path.join(BASE_DIR, "..", "data", "processed", "cleaned_reviews
 # BRAND COLORS
 # -----------------------------------------------------------------------
 
-PRIMARY = "#1B4B43"       # deep teal
+PRIMARY = "#1B4B43"
 PRIMARY_DARK = "#143630"
-ACCENT = "#FF6B5C"        # coral (risk/warning)
-GOLD = "#E8B923"          # premium/trust accent
+ACCENT = "#FF6B5C"
+GOLD = "#E8B923"
 BG = "#FAFAF8"
 CARD_BG = "#FFFFFF"
 MUTED = "#6B7280"
@@ -70,10 +68,6 @@ h1, h2, h3 {{
 .stApp {{
     background-color: {BG};
 }}
-
-
-
-/* Risk banner */
 .risk-banner {{
     background-color: #FFF1EF;
     border-left: 4px solid {ACCENT};
@@ -84,8 +78,6 @@ h1, h2, h3 {{
 .risk-banner, .risk-banner * {{
     color: #7A2E24 !important;
 }}
-
-/* Recommendation cards */
 .rec-card {{
     padding: 16px 18px;
     border-radius: 6px;
@@ -93,6 +85,18 @@ h1, h2, h3 {{
 }}
 .rec-card, .rec-card * {{
     color: inherit;
+}}
+div.stButton > button {{
+    background-color: {PRIMARY};
+    color: white;
+    border-radius: 8px;
+    border: none;
+    font-weight: 600;
+    padding: 8px 14px;
+}}
+div.stButton > button:hover {{
+    background-color: {PRIMARY_DARK};
+    color: white;
 }}
 </style>
 """, unsafe_allow_html=True)
@@ -112,9 +116,8 @@ def load_data():
 def name_clusters(apps: pd.DataFrame) -> pd.DataFrame:
     """
     Dynamically assign business-meaningful names to clusters based on their
-    profile characteristics, rather than hardcoding cluster ID numbers.
-    This keeps the dashboard correct even if a re-run produces different
-    cluster ID assignments (K-Means does not guarantee stable IDs).
+    profile characteristics, rather than hardcoding cluster ID numbers, so
+    the dashboard stays correct even if a re-run produces different IDs.
     """
     days_col = "days_since_update_imputed" if "days_since_update_imputed" in apps.columns else "days_since_update"
 
@@ -130,33 +133,27 @@ def name_clusters(apps: pd.DataFrame) -> pd.DataFrame:
     name_map = {}
     remaining = set(profile.index)
 
-    # Premium Paid Outliers: highest average price (only if genuinely priced)
     premium = profile.loc[list(remaining)]["price"].idxmax()
     if profile.loc[premium, "price"] > 5:
         name_map[premium] = "Premium Paid Outliers"
         remaining.discard(premium)
 
-    # At-Risk: lowest average score among remaining
     at_risk = profile.loc[list(remaining)]["score"].idxmin()
     name_map[at_risk] = "At-Risk / Underperforming"
     remaining.discard(at_risk)
 
-    # Neglected but Functional: highest days_since_update among remaining
     neglected = profile.loc[list(remaining)]["days_since_update"].idxmax()
     name_map[neglected] = "Neglected but Functional"
     remaining.discard(neglected)
 
-    # Trusted Market Leaders: highest installs among remaining
     leader = profile.loc[list(remaining)]["installs"].idxmax()
     name_map[leader] = "Trusted Market Leaders"
     remaining.discard(leader)
 
-    # Freemium Growth-Stage: highest IAP % among remaining
     freemium = profile.loc[list(remaining)]["iap_pct"].idxmax()
     name_map[freemium] = "Freemium Growth-Stage"
     remaining.discard(freemium)
 
-    # Anything left: Free Utility
     for c in remaining:
         name_map[c] = "Free Utility"
 
@@ -168,22 +165,101 @@ def name_clusters(apps: pd.DataFrame) -> pd.DataFrame:
 apps_raw, reviews = load_data()
 apps_raw = name_clusters(apps_raw)
 
+all_categories = sorted(apps_raw["category_grouped"].unique())
+all_price_bands = sorted(apps_raw["price_band"].unique())
+all_clusters = sorted(apps_raw["cluster_name"].unique())
+
 # -----------------------------------------------------------------------
-# SIDEBAR FILTERS
+# SESSION STATE DEFAULTS (needed so bookmark buttons can override filters)
+# -----------------------------------------------------------------------
+
+if "cat_filter" not in st.session_state:
+    st.session_state.cat_filter = all_categories
+if "price_filter" not in st.session_state:
+    st.session_state.price_filter = all_price_bands
+if "cluster_filter" not in st.session_state:
+    st.session_state.cluster_filter = all_clusters
+if "rating_filter" not in st.session_state:
+    st.session_state.rating_filter = (1.0, 5.0)
+if "selected_app_id" not in st.session_state:
+    st.session_state.selected_app_id = None
+
+
+def apply_bookmark(categories, clusters, rating_range):
+    st.session_state.cat_filter = categories
+    st.session_state.show_free = True
+    st.session_state.show_paid = True
+    st.session_state.cluster_filter = clusters
+    st.session_state.rating_filter = rating_range
+
+st.markdown(
+    """
+    <style>
+    /* target text elements inside the focused/active sidebar buttons */
+    section[data-testid="stSidebar"] button:focus p,
+    section[data-testid="stSidebar"] button:active p,
+    section[data-testid="stSidebar"] button:hover p {
+        color: yellow !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True  
+)
+# -----------------------------------------------------------------------
+# SIDEBAR — BOOKMARKS (preset saved views)
+# -----------------------------------------------------------------------
+
+st.sidebar.header("🔖 Bookmarks")
+st.sidebar.caption("Jump straight to a saved view.")
+
+bm1, bm2 = st.sidebar.columns(2)
+with bm1:
+    if st.button("⚠️ At-Risk Only", use_container_width=True):
+        apply_bookmark(all_categories, ["At-Risk / Underperforming"], (1.0, 5.0))
+with bm2:
+    if st.button("✅ Trusted Leaders", use_container_width=True):
+        apply_bookmark(all_categories, ["Trusted Market Leaders"], (1.0, 5.0))
+
+bm3, bm4 = st.sidebar.columns(2)
+with bm3:
+    if st.button("📈 Growth-Stage", use_container_width=True):
+        apply_bookmark(all_categories, ["Freemium Growth-Stage"], (1.0, 5.0))
+with bm4:
+    if st.button("🔄 Reset All", use_container_width=True):
+        apply_bookmark(all_categories, all_clusters, (1.0, 5.0))
+
+st.sidebar.markdown("---")
+
+# -----------------------------------------------------------------------
+# SIDEBAR — FILTERS (sync across all visuals on the page)
 # -----------------------------------------------------------------------
 
 st.sidebar.header("Filters")
 
-categories = sorted(apps_raw["category_grouped"].unique())
-selected_categories = st.sidebar.multiselect("Category", categories, default=categories)
+selected_categories = st.sidebar.multiselect(
+    "Category", all_categories, key="cat_filter"
+)
+st.sidebar.markdown("**Price Band**")
+price_toggle_col1, price_toggle_col2 = st.sidebar.columns(2)
+with price_toggle_col1:
+    show_free = st.toggle("Free", value=True, key="show_free")
+with price_toggle_col2:
+    show_paid = st.toggle("Paid", value=True, key="show_paid")
 
-price_bands = sorted(apps_raw["price_band"].unique())
-selected_price = st.sidebar.multiselect("Price Band", price_bands, default=price_bands)
+selected_price = []
+if show_free:
+    selected_price.append("Free")
+if show_paid:
+    selected_price.append("Paid")
+if not selected_price:
+    selected_price = all_price_bands  
 
-cluster_names = sorted(apps_raw["cluster_name"].unique())
-selected_clusters = st.sidebar.multiselect("Segment", cluster_names, default=cluster_names)
-
-rating_range = st.sidebar.slider("Rating Range", 1.0, 5.0, (1.0, 5.0), 0.1)
+selected_clusters = st.sidebar.multiselect(
+    "Segment", all_clusters, key="cluster_filter"
+)
+rating_range = st.sidebar.slider(
+    "Rating Range", 1.0, 5.0, step=0.1, key="rating_filter"
+)
 
 apps = apps_raw[
     apps_raw["category_grouped"].isin(selected_categories)
@@ -271,14 +347,14 @@ with c1:
         seg_counts, x="Count", y="Segment", orientation="h",
         color="Segment", color_discrete_map=CLUSTER_COLORS, text="Count",
     )
-    fig.update_layout(showlegend=False, height=380, plot_bgcolor="white",
+    fig.update_layout(showlegend=False, height=380, plot_bgcolor="white", paper_bgcolor="white",
                        margin=dict(l=0, r=10, t=10, b=0))
     st.plotly_chart(fig, use_container_width=True)
 
 with c2:
     st.subheader("Rating Distribution")
     fig = px.histogram(apps, x="score", nbins=25, color_discrete_sequence=[PRIMARY])
-    fig.update_layout(height=380, plot_bgcolor="white",
+    fig.update_layout(height=380, plot_bgcolor="white", paper_bgcolor="white",
                        xaxis_title="Rating", yaxis_title="Number of Apps",
                        margin=dict(l=0, r=10, t=10, b=0))
     st.plotly_chart(fig, use_container_width=True)
@@ -296,7 +372,7 @@ with c3:
         color_discrete_map=CLUSTER_COLORS, hover_data=["title"], opacity=0.6,
         labels={"log_installs": "log10(Installs)", "score": "Rating"},
     )
-    fig.update_layout(height=400, plot_bgcolor="white",
+    fig.update_layout(height=400, plot_bgcolor="white", paper_bgcolor="white",
                        margin=dict(l=0, r=10, t=10, b=0),
                        legend=dict(orientation="h", y=-0.25))
     st.plotly_chart(fig, use_container_width=True)
@@ -306,7 +382,7 @@ with c4:
     cat_counts = apps["category_grouped"].value_counts().reset_index()
     cat_counts.columns = ["Category", "Count"]
     fig = px.bar(cat_counts, x="Category", y="Count", color_discrete_sequence=[PRIMARY])
-    fig.update_layout(height=400, plot_bgcolor="white",
+    fig.update_layout(height=400, plot_bgcolor="white", paper_bgcolor="white",
                        margin=dict(l=0, r=10, t=10, b=0))
     st.plotly_chart(fig, use_container_width=True)
 
@@ -358,10 +434,8 @@ with c6:
         [["title", "score", "ratings", "cluster_name"]]
         .head(10)
         .rename(columns={
-            "title": "App",
-            "score": "Rating",
-            "ratings": "Total Ratings",
-            "cluster_name": "Segment",
+            "title": "App", "score": "Rating",
+            "ratings": "Total Ratings", "cluster_name": "Segment",
         })
     )
     st.dataframe(
@@ -375,25 +449,24 @@ with c6:
     )
 
 # -----------------------------------------------------------------------
-# APP EXPLORER TABLE
+# APP EXPLORER TABLE — with DRILL-THROUGH (click a row to see full detail)
 # -----------------------------------------------------------------------
 
 st.subheader("App Explorer")
-explorer_cols = ["title", "developer", "category_grouped", "score", "minInstalls",
+st.caption("💡 Click a row to drill through into that app's full detail, including its reviews.")
+
+explorer_cols = ["app_id", "title", "developer", "category_grouped", "score", "minInstalls",
                   "price_band", "cluster_name", "rating_tier"]
 explorer_df = apps[explorer_cols].rename(columns={
-    "title": "App",
-    "developer": "Developer",
-    "category_grouped": "Category",
-    "score": "Rating",
-    "minInstalls": "Installs",
-    "price_band": "Price",
-    "cluster_name": "Segment",
-    "rating_tier": "Rating Tier",
-}).sort_values("Rating", ascending=False)
+    "title": "App", "developer": "Developer", "category_grouped": "Category",
+    "score": "Rating", "minInstalls": "Installs", "price_band": "Price",
+    "cluster_name": "Segment", "rating_tier": "Rating Tier",
+}).sort_values("Rating", ascending=False).reset_index(drop=True)
 
-st.dataframe(
-    explorer_df, use_container_width=True, hide_index=True, height=350,
+display_df = explorer_df.drop(columns=["app_id"])
+
+selection = st.dataframe(
+    display_df, use_container_width=True, hide_index=True, height=350,
     column_config={
         "App": st.column_config.TextColumn("App", width="large"),
         "Developer": st.column_config.TextColumn("Developer", width="medium"),
@@ -404,7 +477,53 @@ st.dataframe(
         "Segment": st.column_config.TextColumn("Segment", width="medium"),
         "Rating Tier": st.column_config.TextColumn("Rating Tier", width="small"),
     },
+    on_select="rerun",
+    selection_mode="single-row",
 )
+
+selected_rows = selection.selection.rows if selection and selection.selection else []
+if selected_rows:
+    st.session_state.selected_app_id = explorer_df.iloc[selected_rows[0]]["app_id"]
+
+# --- Drill-through detail panel ---
+if st.session_state.selected_app_id is not None:
+    detail_app = apps_raw[apps_raw["app_id"] == st.session_state.selected_app_id]
+    if len(detail_app) > 0:
+        detail_app = detail_app.iloc[0]
+        with st.container():
+            st.markdown(f"""
+            <div style="background-color:{CARD_BG}; border:1px solid {BORDER}; border-radius:10px;
+                        padding:20px 24px; margin-top:10px;">
+                <h3 style="margin-top:0; color:{PRIMARY};">🔍 {detail_app['title']}</h3>
+                <p style="color:{MUTED}; margin-bottom:14px;">by {detail_app['developer']} &nbsp;•&nbsp;
+                {detail_app['category_grouped']} &nbsp;•&nbsp;
+                <span style="color:{CLUSTER_COLORS.get(detail_app['cluster_name'], PRIMARY)}; font-weight:600;">
+                {detail_app['cluster_name']}</span></p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            d1, d2, d3, d4 = st.columns(4)
+            d1.markdown(kpi_card("Rating", f"{detail_app['score']:.2f}"), unsafe_allow_html=True)
+            d2.markdown(kpi_card("Installs", f"{detail_app['minInstalls']:,.0f}"), unsafe_allow_html=True)
+            d3.markdown(kpi_card("Price", detail_app['price_band']), unsafe_allow_html=True)
+            d4.markdown(kpi_card("Rating Tier", detail_app['rating_tier']), unsafe_allow_html=True)
+
+            st.markdown("###")
+            st.markdown("**Description**")
+            st.write(detail_app['description'][:600] + ("..." if len(str(detail_app['description'])) > 600 else ""))
+
+            st.markdown("**Recent Reviews**")
+            app_reviews = reviews[reviews["app_id"] == detail_app["app_id"]].sort_values("at", ascending=False).head(5)
+            if len(app_reviews) > 0:
+                for _, r in app_reviews.iterrows():
+                    stars = "⭐" * int(r["score"])
+                    st.markdown(f"{stars} — {r['content'][:200]}")
+            else:
+                st.caption("No reviews available for this app in the current dataset.")
+
+            if st.button("✕ Close Detail View"):
+                st.session_state.selected_app_id = None
+                st.rerun()
 
 # -----------------------------------------------------------------------
 # BUSINESS RECOMMENDATIONS
@@ -460,5 +579,7 @@ st.markdown("---")
 st.caption(
     "FitScope Analytics — Fitness App Market Analytics Capstone. Data scraped from Google Play Store. "
     "Segments derived via K-Means clustering (k=6); rating prediction via Random Forest classification, "
-    "enhanced with review sentiment features."
+    "enhanced with review sentiment features. Sidebar filters sync across all visuals (equivalent to "
+    "Power BI sync slicers); bookmark buttons jump to saved views; clicking an app row drills through "
+    "to its full detail and recent reviews."
 )
