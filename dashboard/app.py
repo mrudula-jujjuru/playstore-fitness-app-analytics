@@ -191,7 +191,7 @@ def apply_bookmark(categories, clusters, rating_range):
     st.session_state.show_paid = True
     st.session_state.cluster_filter = clusters
     st.session_state.rating_filter = rating_range
-
+    st.session_state.selected_app_id = None 
 st.markdown(
     """
     <style>
@@ -239,20 +239,33 @@ st.sidebar.header("Filters")
 selected_categories = st.sidebar.multiselect(
     "Category", all_categories, key="cat_filter"
 )
+# Initialize once — only runs if the key doesn't exist yet
+if "show_free" not in st.session_state:
+    st.session_state.show_free = True
+if "show_paid" not in st.session_state:
+    st.session_state.show_paid = True
+
 st.sidebar.markdown("**Price Band**")
+
+def _reset_both_if_none_selected():
+    if not st.session_state.show_free and not st.session_state.show_paid:
+        st.session_state.show_free = True
+        st.session_state.show_paid = True
+
 price_toggle_col1, price_toggle_col2 = st.sidebar.columns(2)
 with price_toggle_col1:
-    show_free = st.toggle("Free", value=True, key="show_free")
+    st.toggle("Free", key="show_free", on_change=_reset_both_if_none_selected)
 with price_toggle_col2:
-    show_paid = st.toggle("Paid", value=True, key="show_paid")
+    st.toggle("Paid", key="show_paid", on_change=_reset_both_if_none_selected)
+
+show_free = st.session_state.show_free
+show_paid = st.session_state.show_paid
 
 selected_price = []
 if show_free:
     selected_price.append("Free")
 if show_paid:
     selected_price.append("Paid")
-if not selected_price:
-    selected_price = all_price_bands  
 
 selected_clusters = st.sidebar.multiselect(
     "Segment", all_clusters, key="cluster_filter"
@@ -487,7 +500,7 @@ if selected_rows:
 
 # --- Drill-through detail panel ---
 if st.session_state.selected_app_id is not None:
-    detail_app = apps_raw[apps_raw["app_id"] == st.session_state.selected_app_id]
+    detail_app = apps[apps["app_id"] == st.session_state.selected_app_id]
     if len(detail_app) > 0:
         detail_app = detail_app.iloc[0]
         with st.container():
@@ -524,6 +537,8 @@ if st.session_state.selected_app_id is not None:
             if st.button("✕ Close Detail View"):
                 st.session_state.selected_app_id = None
                 st.rerun()
+    else:
+        st.session_state.selected_app_id = None
 
 # -----------------------------------------------------------------------
 # BUSINESS RECOMMENDATIONS
