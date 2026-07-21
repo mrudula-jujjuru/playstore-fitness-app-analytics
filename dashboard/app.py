@@ -583,7 +583,7 @@ with rec_col2:
 
 st.caption(
     "Review sentiment (% negative reviews) is the single strongest predictor of app "
-    "quality — stronger than any metadata field. See modeling notebook (Section B6) for details."
+    "quality — stronger than any metadata field."
 )
 
 # -----------------------------------------------------------------------
