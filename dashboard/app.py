@@ -594,7 +594,7 @@ st.markdown("---")
 st.caption(
     "FitScope Analytics — Fitness App Market Analytics Capstone. Data scraped from Google Play Store. "
     "Segments derived via K-Means clustering (k=6); rating prediction via Random Forest classification, "
-    "enhanced with review sentiment features. Sidebar filters sync across all visuals (equivalent to "
-    "Power BI sync slicers); bookmark buttons jump to saved views; clicking an app row drills through "
+    "enhanced with review sentiment features. Sidebar filters sync across all visuals; "
+    "bookmark buttons jump to saved views; clicking an app row drills through "
     "to its full detail and recent reviews."
 )
